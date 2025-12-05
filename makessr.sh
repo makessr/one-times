@@ -28,7 +28,7 @@ EOF
     fi
 }
 
-# 安装 sing-box 并生成配置
+# 安装或更新 sing-box 最新 release
 function install_singbox() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "请用 root 权限运行此脚本"
@@ -38,43 +38,37 @@ function install_singbox() {
     enable_bbr
 
     apt-get update -y
-    apt-get install -y curl unzip jq openssl tar
+    apt-get install -y curl jq tar openssl
 
-    # 获取最新版本
-    LATEST_VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r '.tag_name')
-    VERSION=${LATEST_VERSION#v}
+    # 判断架构
     ARCH=$(uname -m)
-
     case "$ARCH" in
-        x86_64)   SB_ARCH="amd64" ;;
-        aarch64)  SB_ARCH="arm64" ;;
-        armv7l)   SB_ARCH="armv7" ;;
-        *) echo "不支持的架构: $ARCH"; exit 1 ;;
+        x86_64) SB_ARCH="amd64" ;;
+        aarch64) SB_ARCH="arm64" ;;
+        armv7l) SB_ARCH="armv7" ;;
+        *) echo "Unsupported arch: $ARCH"; exit 1 ;;
     esac
 
-    URL="https://github.com/SagerNet/sing-box/releases/download/${LATEST_VERSION}/sing-box-${VERSION}-linux-${SB_ARCH}.tar.gz"
-    echo "下载 sing-box: $URL"
-    curl -L -o /tmp/singbox.tar.gz "$URL"
+    # 获取最新 release
+    LATEST_TAG=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r '.tag_name')
+    VERSION=${LATEST_TAG#v}
+    URL="https://github.com/SagerNet/sing-box/releases/download/${LATEST_TAG}/sing-box-${VERSION}-linux-${SB_ARCH}.tar.gz"
+
+    echo "下载 sing-box ${LATEST_TAG} ..."
+    curl -L "$URL" -o /tmp/singbox.tar.gz
     mkdir -p /tmp/singbox
     tar -xzf /tmp/singbox.tar.gz -C /tmp/singbox
 
-    if [ -f "/tmp/singbox/sing-box" ]; then
-        SRC="/tmp/singbox/sing-box"
-    elif [ -f "/tmp/singbox/sing-box-${VERSION}-linux-${SB_ARCH}/sing-box" ]; then
-        SRC="/tmp/singbox/sing-box-${VERSION}-linux-${SB_ARCH}/sing-box"
-    else
-        SRC="$(find /tmp/singbox -type f -name 'sing-box' | head -n1)"
-    fi
-
-    if [ -z "$SRC" ]; then
-        echo "解压后未找到 sing-box 可执行文件"
+    BIN_SRC=$(find /tmp/singbox -type f -name 'sing-box' | head -n1)
+    if [ -z "$BIN_SRC" ]; then
+        echo "找不到 sing-box 可执行文件"
         exit 1
     fi
 
-    mv "$SRC" "$BIN_FILE"
+    mv "$BIN_SRC" "$BIN_FILE"
     chmod +x "$BIN_FILE"
 
-    # 生成 VLESS+Reality 密钥、端口
+    # 生成 VLESS+Reality 配置
     UUID=$(cat /proc/sys/kernel/random/uuid)
     KEYPAIR=$($BIN_FILE generate reality-keypair)
     PRIVATE_KEY=$(echo "$KEYPAIR" | grep "PrivateKey" | awk '{print $2}')
@@ -83,17 +77,8 @@ function install_singbox() {
     SNI="rum.hlx.page"
     SHORT_ID=$(openssl rand -hex 4)
 
-    # Hysteria2 配置
-    HYSTERIA_PORT=$((RANDOM % 10000 + 20000))
-    HYSTERIA_PASSWORD=$(openssl rand -hex 8)
-
-    # TUIC 配置
-    TUIC_PORT=$((RANDOM % 10000 + 30000))
-    TUIC_PASSWORD=$(openssl rand -hex 8)
-
     mkdir -p "$CONFIG_DIR"
 
-    # 生成配置文件（使用最新 auth 格式）
     cat > "$CONFIG_FILE" <<EOF
 {
   "log": { "level": "info" },
@@ -113,21 +98,6 @@ function install_singbox() {
           "short_id": ["${SHORT_ID}"]
         }
       }
-    },
-    {
-      "type": "hysteria",
-      "listen": "::",
-      "listen_port": ${HYSTERIA_PORT},
-      "obfs": "udp",
-      "auth": { "mode": "password", "password": "${HYSTERIA_PASSWORD}" },
-      "tls": { "enabled": true, "server_name": "${SNI}" }
-    },
-    {
-      "type": "tuic",
-      "listen": "::",
-      "listen_port": ${TUIC_PORT},
-      "auth": { "mode": "password", "password": "${TUIC_PASSWORD}" },
-      "tls": { "enabled": true, "server_name": "${SNI}" }
     }
   ],
   "outbounds": [ { "type": "direct", "tag": "direct" } ],
@@ -135,10 +105,9 @@ function install_singbox() {
 }
 EOF
 
-    # 验证配置
-    echo "验证配置文件..."
+    echo "验证配置..."
     if ! $BIN_FILE check -c "$CONFIG_FILE"; then
-        echo "配置文件验证失败！"
+        echo "配置验证失败，请检查"
         exit 1
     fi
 
@@ -164,39 +133,19 @@ EOF
     sleep 3
 
     if ! systemctl is-active --quiet "$SERVICE_NAME"; then
-        echo "服务启动失败！查看日志："
+        echo "服务启动失败，查看日志:"
         journalctl -u "$SERVICE_NAME" --no-pager -n 20
         exit 1
     fi
 
     SERVER_IP=$(curl -s ipv4.icanhazip.com)
-
-    # 输出连接信息
     VLESS_URL="vless://${UUID}@${SERVER_IP}:${VLESS_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${SNI}&fp=ios&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp#Reality"
 
     echo -e "\n======================"
-    echo "Sing-Box 安装完成 ✅"
+    echo "Sing-Box 最新版本 ${LATEST_TAG} 安装完成 ✅"
     echo "服务状态: $(systemctl is-active $SERVICE_NAME)"
-    echo -e "\nVLESS Reality 链接:\n${VLESS_URL}"
-    echo -e "\nHysteria2 信息:"
-    echo "IP: $SERVER_IP"
-    echo "Port: $HYSTERIA_PORT"
-    echo "Password: $HYSTERIA_PASSWORD"
-    echo "Protocol: udp"
-    echo "TLS: true"
-    echo "SNI: $SNI"
-    echo -e "\nTUIC 信息:"
-    echo "IP: $SERVER_IP"
-    echo "Port: $TUIC_PORT"
-    echo "Password: $TUIC_PASSWORD"
-    echo "TLS: true"
-    echo "SNI: $SNI"
-    echo -e "\n管理命令："
-    echo "启动服务: systemctl start $SERVICE_NAME"
-    echo "停止服务: systemctl stop $SERVICE_NAME"
-    echo "重启服务: systemctl restart $SERVICE_NAME"
-    echo "查看状态: systemctl status $SERVICE_NAME"
-    echo "查看日志: journalctl -u $SERVICE_NAME -f"
+    echo "VLESS Reality 链接:\n${VLESS_URL}"
+    echo -e "管理命令:\n systemctl start|stop|restart $SERVICE_NAME\n journalctl -u $SERVICE_NAME -f"
     echo "======================"
 
     rm -rf /tmp/singbox*
@@ -204,53 +153,20 @@ EOF
 
 # 卸载
 function uninstall_singbox() {
-    echo "停止服务..."
     systemctl stop "$SERVICE_NAME" 2>/dev/null || true
     systemctl disable "$SERVICE_NAME" 2>/dev/null || true
-    rm -f "$SERVICE_FILE"
-    systemctl daemon-reload
+    rm -f "$SERVICE_FILE" "$BIN_FILE"
     rm -rf "$CONFIG_DIR"
-    rm -f "$BIN_FILE"
+    systemctl daemon-reload
     echo "卸载完成 ✅"
-}
-
-# 重启
-function restart_singbox() {
-    echo "重启服务..."
-    systemctl restart "$SERVICE_NAME"
-    sleep 2
-    systemctl status "$SERVICE_NAME" --no-pager -l
-}
-
-# 查看状态
-function status_singbox() {
-    echo "=== 服务状态 ==="
-    systemctl status "$SERVICE_NAME" --no-pager -l
-    echo -e "\n=== 监听端口 ==="
-    ss -tlnp | grep sing-box || echo "未找到监听端口"
-    echo -e "\n=== 最近日志 ==="
-    journalctl -u "$SERVICE_NAME" --no-pager -n 10
-}
-
-# 查看配置
-function show_config() {
-    if [ -f "$CONFIG_FILE" ]; then
-        echo "=== 当前配置 ==="
-        cat "$CONFIG_FILE"
-    else
-        echo "配置文件不存在: $CONFIG_FILE"
-    fi
 }
 
 # 参数处理
 case "$1" in
     install) install_singbox ;;
     uninstall) uninstall_singbox ;;
-    restart) restart_singbox ;;
-    status) status_singbox ;;
-    config) show_config ;;
-    *)
-        echo "用法: $0 {install|uninstall|restart|status|config}"
-        exit 1
-        ;;
+    restart) systemctl restart "$SERVICE_NAME" ;;
+    status) systemctl status "$SERVICE_NAME" --no-pager -l ;;
+    config) cat "$CONFIG_FILE" ;;
+    *) echo "用法: $0 {install|uninstall|restart|status|config}"; exit 1 ;;
 esac

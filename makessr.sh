@@ -93,7 +93,7 @@ function install_singbox() {
 
     mkdir -p "$CONFIG_DIR"
 
-    # 生成完整配置文件（修正 auth_type 问题）
+    # 生成完整配置文件（最新 auth 结构）
     cat > "$CONFIG_FILE" <<EOF
 {
   "log": {
@@ -129,7 +129,10 @@ function install_singbox() {
       "listen": "::",
       "listen_port": ${HYSTERIA_PORT},
       "obfs": "udp",
-      "password": "${HYSTERIA_PASSWORD}",
+      "auth": {
+        "mode": "password",
+        "password": "${HYSTERIA_PASSWORD}"
+      },
       "tls": {
         "enabled": true,
         "server_name": "${SNI}"
@@ -139,7 +142,10 @@ function install_singbox() {
       "type": "tuic",
       "listen": "::",
       "listen_port": ${TUIC_PORT},
-      "password": "${TUIC_PASSWORD}",
+      "auth": {
+        "mode": "password",
+        "password": "${TUIC_PASSWORD}"
+      },
       "tls": {
         "enabled": true,
         "server_name": "${SNI}"

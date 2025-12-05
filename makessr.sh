@@ -80,7 +80,7 @@ function install_singbox() {
     PRIVATE_KEY=$(echo "$KEYPAIR" | grep "PrivateKey" | awk '{print $2}')
     PUBLIC_KEY=$(echo "$KEYPAIR" | grep "PublicKey" | awk '{print $2}')
     VLESS_PORT=$((RANDOM % 10000 + 10000))
-    SNI="gateway.icloud.com"
+    SNI="rum.hlx.page"
     SHORT_ID=$(openssl rand -hex 4)
 
     # Hysteria2 配置
@@ -93,7 +93,7 @@ function install_singbox() {
 
     mkdir -p "$CONFIG_DIR"
 
-    # 生成完整配置文件
+    # 生成完整配置文件（修正 auth_type 问题）
     cat > "$CONFIG_FILE" <<EOF
 {
   "log": {
@@ -129,8 +129,7 @@ function install_singbox() {
       "listen": "::",
       "listen_port": ${HYSTERIA_PORT},
       "obfs": "udp",
-      "auth_type": "password",
-      "auth_password": "${HYSTERIA_PASSWORD}",
+      "password": "${HYSTERIA_PASSWORD}",
       "tls": {
         "enabled": true,
         "server_name": "${SNI}"
@@ -140,8 +139,7 @@ function install_singbox() {
       "type": "tuic",
       "listen": "::",
       "listen_port": ${TUIC_PORT},
-      "auth_type": "password",
-      "auth_password": "${TUIC_PASSWORD}",
+      "password": "${TUIC_PASSWORD}",
       "tls": {
         "enabled": true,
         "server_name": "${SNI}"

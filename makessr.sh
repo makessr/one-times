@@ -31,8 +31,8 @@ EOF
 # 安装 sing-box 并生成配置
 function install_singbox() {
     if [ "$(id -u)" -ne 0 ]; then
-      echo "请用 root 权限运行此脚本"
-      exit 1
+        echo "请用 root 权限运行此脚本"
+        exit 1
     fi
 
     enable_bbr
@@ -46,10 +46,10 @@ function install_singbox() {
     ARCH=$(uname -m)
 
     case "$ARCH" in
-      x86_64)   SB_ARCH="amd64" ;;
-      aarch64)  SB_ARCH="arm64" ;;
-      armv7l)   SB_ARCH="armv7" ;;
-      *) echo "不支持的架构: $ARCH"; exit 1 ;;
+        x86_64)   SB_ARCH="amd64" ;;
+        aarch64)  SB_ARCH="arm64" ;;
+        armv7l)   SB_ARCH="armv7" ;;
+        *) echo "不支持的架构: $ARCH"; exit 1 ;;
     esac
 
     URL="https://github.com/SagerNet/sing-box/releases/download/${LATEST_VERSION}/sing-box-${VERSION}-linux-${SB_ARCH}.tar.gz"
@@ -59,16 +59,16 @@ function install_singbox() {
     tar -xzf /tmp/singbox.tar.gz -C /tmp/singbox
 
     if [ -f "/tmp/singbox/sing-box" ]; then
-      SRC="/tmp/singbox/sing-box"
+        SRC="/tmp/singbox/sing-box"
     elif [ -f "/tmp/singbox/sing-box-${VERSION}-linux-${SB_ARCH}/sing-box" ]; then
-      SRC="/tmp/singbox/sing-box-${VERSION}-linux-${SB_ARCH}/sing-box"
+        SRC="/tmp/singbox/sing-box-${VERSION}-linux-${SB_ARCH}/sing-box"
     else
-      SRC="$(find /tmp/singbox -type f -name 'sing-box' | head -n1)"
+        SRC="$(find /tmp/singbox -type f -name 'sing-box' | head -n1)"
     fi
 
     if [ -z "$SRC" ]; then
-      echo "解压后未找到 sing-box 可执行文件"
-      exit 1
+        echo "解压后未找到 sing-box 可执行文件"
+        exit 1
     fi
 
     mv "$SRC" "$BIN_FILE"
@@ -93,32 +93,22 @@ function install_singbox() {
 
     mkdir -p "$CONFIG_DIR"
 
-    # 生成完整配置文件（最新 auth 结构）
+    # 生成配置文件（最新 auth 格式）
     cat > "$CONFIG_FILE" <<EOF
 {
-  "log": {
-    "level": "info"
-  },
+  "log": { "level": "info" },
   "inbounds": [
     {
       "type": "vless",
       "listen": "::",
       "listen_port": ${VLESS_PORT},
-      "users": [
-        {
-          "uuid": "${UUID}",
-          "flow": "xtls-rprx-vision"
-        }
-      ],
+      "users": [ { "uuid": "${UUID}", "flow": "xtls-rprx-vision" } ],
       "tls": {
         "enabled": true,
         "server_name": "${SNI}",
         "reality": {
           "enabled": true,
-          "handshake": {
-            "server": "${SNI}",
-            "server_port": 443
-          },
+          "handshake": { "server": "${SNI}", "server_port": 443 },
           "private_key": "${PRIVATE_KEY}",
           "short_id": ["${SHORT_ID}"]
         }
@@ -129,38 +119,19 @@ function install_singbox() {
       "listen": "::",
       "listen_port": ${HYSTERIA_PORT},
       "obfs": "udp",
-      "auth": {
-        "mode": "password",
-        "password": "${HYSTERIA_PASSWORD}"
-      },
-      "tls": {
-        "enabled": true,
-        "server_name": "${SNI}"
-      }
+      "auth": { "mode": "password", "password": "${HYSTERIA_PASSWORD}" },
+      "tls": { "enabled": true, "server_name": "${SNI}" }
     },
     {
       "type": "tuic",
       "listen": "::",
       "listen_port": ${TUIC_PORT},
-      "auth": {
-        "mode": "password",
-        "password": "${TUIC_PASSWORD}"
-      },
-      "tls": {
-        "enabled": true,
-        "server_name": "${SNI}"
-      }
+      "auth": { "mode": "password", "password": "${TUIC_PASSWORD}" },
+      "tls": { "enabled": true, "server_name": "${SNI}" }
     }
   ],
-  "outbounds": [
-    {
-      "type": "direct",
-      "tag": "direct"
-    }
-  ],
-  "route": {
-    "final": "direct"
-  }
+  "outbounds": [ { "type": "direct", "tag": "direct" } ],
+  "route": { "final": "direct" }
 }
 EOF
 
@@ -200,14 +171,13 @@ EOF
 
     SERVER_IP=$(curl -s ipv4.icanhazip.com)
 
-    # 输出 VLESS Reality 链接
+    # 输出连接信息
     VLESS_URL="vless://${UUID}@${SERVER_IP}:${VLESS_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${SNI}&fp=ios&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp#Reality"
 
     echo -e "\n======================"
     echo "Sing-Box 安装完成 ✅"
     echo "服务状态: $(systemctl is-active $SERVICE_NAME)"
-    echo -e "\nVLESS Reality 链接:"
-    echo "${VLESS_URL}"
+    echo -e "\nVLESS Reality 链接:\n${VLESS_URL}"
     echo -e "\nHysteria2 信息:"
     echo "IP: $SERVER_IP"
     echo "Port: $HYSTERIA_PORT"
@@ -274,21 +244,11 @@ function show_config() {
 
 # 参数处理
 case "$1" in
-    install)
-        install_singbox
-        ;;
-    uninstall)
-        uninstall_singbox
-        ;;
-    restart)
-        restart_singbox
-        ;;
-    status)
-        status_singbox
-        ;;
-    config)
-        show_config
-        ;;
+    install) install_singbox ;;
+    uninstall) uninstall_singbox ;;
+    restart) restart_singbox ;;
+    status) status_singbox ;;
+    config) show_config ;;
     *)
         echo "用法: $0 {install|uninstall|restart|status|config}"
         exit 1

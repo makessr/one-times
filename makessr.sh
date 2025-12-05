@@ -93,7 +93,7 @@ function install_singbox() {
 
     mkdir -p "$CONFIG_DIR"
 
-    # 生成配置文件（最新 auth 格式）
+    # 生成配置文件（使用最新 auth 格式）
     cat > "$CONFIG_FILE" <<EOF
 {
   "log": { "level": "info" },
